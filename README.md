@@ -38,7 +38,10 @@ MQTTPASWD=mqttpassword
 TELEPERIOD=10
 # is a prefix inserted into topic, chage it if you need
 id_prefix=364715398511
-# Max size of the BMS_error.log and nohup.out
+# Optional log file path. Leave empty to log only to stdout.
+# Example: LOGFILE=/home/pi/SEPLOS_MQTT/BMS_error.log
+LOGFILE=
+# Max size in bytes of the log file and nohup.out before they get rotated
 MAXSIZE=2000000
 # Minmum voltage in mV permitted for Cell value for correct output
 CELL_MIN_VOLT=2500
@@ -148,7 +151,10 @@ MQTTPASWD=mqttpassword
 TELEPERIOD=10
 # is a prefix inserted into topic, chage it if you need
 id_prefix=364715398511
-# Max size of the BMS_error.log and nohup.out
+# Optional log file path. Leave empty to log only to stdout.
+# Example: LOGFILE=/home/pi/SEPLOS_MQTT/BMS_error.log
+LOGFILE=
+# Max size in bytes of the log file and nohup.out before they get rotated
 MAXSIZE=2000000
 # Minmum voltage in mV permitted for Cell value for correct output
 CELL_MIN_VOLT=2500

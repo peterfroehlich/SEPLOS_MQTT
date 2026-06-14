@@ -7,9 +7,16 @@ MQTTUSER=$(grep "MQTTUSER" /root/share/SEPLOS_MQTT/config.ini | awk -F "=" '{pri
 MQTTPASWD=$(grep "MQTTPASWD" /root/share/SEPLOS_MQTT/config.ini | awk -F "=" '{print $2}')
 TELEPERIOD=$(grep "TELEPERIOD" /root/share/SEPLOS_MQTT/config.ini | awk -F "=" '{print $2}')
 id_prefix=$(grep "id_prefix" /root/share/SEPLOS_MQTT/config.ini | awk -F "=" '{print $2}')
+LOGFILE=$(grep "^LOGFILE=" /root/share/SEPLOS_MQTT/config.ini | awk -F "=" '{print $2}')
 MAXSIZE=$(grep "MAXSIZE" /root/share/SEPLOS_MQTT/config.ini | awk -F "=" '{print $2}')
 CELL_MIN_VOLT=$(grep "CELL_MIN_VOLT" /root/share/SEPLOS_MQTT/config.ini | awk -F "=" '{print $2}')
 CELL_MAX_VOLT=$(grep "CELL_MAX_VOLT" /root/share/SEPLOS_MQTT/config.ini | awk -F "=" '{print $2}')
+
+# Always write to stdout; append to $LOGFILE when set.
+log() {
+        echo "$@"
+        [ -n "$LOGFILE" ] && echo "$@" >> "$LOGFILE"
+}
 
 # The function....
 
@@ -19,7 +26,7 @@ checkcellsvoltage()
          counter=1
          for CELLVOLTAGE in "$CELL1" "$CELL2" "$CELL3" "$CELL4" "$CELL5" "$CELL6" "$CELL7" "$CELL8" "$CELL9" "$CELL10" "$CELL11" "$CELL12" "$CELL13" "$CELL14" "$CELL15" "$CELL16"; do
                 if [ "$CELLVOLTAGE" -lt $CELL_MIN_VOLT ] || [ "$CELLVOLTAGE" -gt $CELL_MAX_VOLT ]; then
-                        echo "$DATE - Warning 0: The value $CELLVOLTAGE for cell "$counter" is not between "$CELL_MIN_VOLT" and "$CELL_MAX_VOLT" skip data" >> $LOGNAME
+                        log "$DATE - Warning 0: The value $CELLVOLTAGE for cell $counter is not between $CELL_MIN_VOLT and $CELL_MAX_VOLT skip data"
                         STATUS=1
                         break
                 fi
@@ -29,25 +36,26 @@ checkcellsvoltage()
 }
 
 # The main script....
-LOGNAME=/root/share/SEPLOS_MQTT/BMS_error.log
 NOUPFILE=/root/share/SEPLOS_MQTT/nohup.out
 #cd ~/SEPLOS_MQTT/
-if [ ! -f "$LOGNAME" ]; then
-touch "$LOGNAME"
+if [ -n "$LOGFILE" ] && [ ! -f "$LOGFILE" ]; then
+        touch "$LOGFILE"
 fi
 
 if [ ! -f "$NOUPFILE" ]; then
-touch "$NOUPFILE"
+        touch "$NOUPFILE"
 fi
 
 # Publish Home Assistant MQTT auto-discovery configs (retained). Cheap; safe to run every cycle.
-/root/share/SEPLOS_MQTT/publish_ha_discovery.sh >> $LOGNAME
+log "$(/root/share/SEPLOS_MQTT/publish_ha_discovery.sh)"
 
 #for (( ; ; ))
 #do
-  LOGNAME_SIZE=$(ls -l "$LOGNAME" | awk '{print $5}')
-  if [ $LOGNAME_SIZE -ge $MAXSIZE ]; then
-    mv "$LOGNAME" "$LOGNAME".old
+  if [ -n "$LOGFILE" ] && [ -f "$LOGFILE" ]; then
+    LOGFILE_SIZE=$(ls -l "$LOGFILE" | awk '{print $5}')
+    if [ "$LOGFILE_SIZE" -ge "$MAXSIZE" ]; then
+      mv "$LOGFILE" "$LOGFILE".old
+    fi
   fi
 
   NOUPFILE_SIZE=$(ls -l "$NOUPFILE" | awk '{print $5}')
@@ -93,17 +101,17 @@ CELL15=$(echo $QUERY|awk '{print $15}')
 CELL16=$(echo $QUERY|awk '{print $16}')
 
         if [[ "$onlycells" =~ "rror" ]]; then
-                echo "$DATE - Warning 1: Data from BMS contain 'Error' skip data" >> $LOGNAME
+                log "$DATE - Warning 1: Data from BMS contain 'Error' skip data"
         elif [[ "$onlycells" =~ "Failed" ]]; then
-                echo "$DATE - Warning 2: Data from BMS contain 'Failed' skip data" >> $LOGNAME
+                log "$DATE - Warning 2: Data from BMS contain 'Failed' skip data"
         elif (( $(echo "$VAR"'>'100 |bc -l) )); then
-                echo "$DATE - Warning 3: SOC value over 100 value=$VAR skip data" >> $LOGNAME
+                log "$DATE - Warning 3: SOC value over 100 value=$VAR skip data"
         elif (( $(echo "$VAR"'<'1 |bc -l) )); then
-                echo "$DATE - Warning 4: SOC Value below 1 SOC=$VAR skip data" >> $LOGNAME
+                log "$DATE - Warning 4: SOC Value below 1 SOC=$VAR skip data"
         elif [[ "$onlycells" =~ "~" ]]; then
-                echo "$DATE - Warning 5: Data from BMS contain '~' skip data" >> $LOGNAME
+                log "$DATE - Warning 5: Data from BMS contain '~' skip data"
         elif [ "${VAR+x}" = x ] && [ -z "$VAR" ]; then
-                echo "$DATE - Warning 6: SOC value is null skip data" >> $LOGNAME
+                log "$DATE - Warning 6: SOC value is null skip data"
         else
 
         checkcellsvoltage
@@ -166,7 +174,7 @@ mqtt_argument=$(printf "{\
 
 # send MQTT message with all parameters
         mosquitto_pub -h $MQTTHOST -u $MQTTUSER -P $MQTTPASWD -t "homeassistant/sensor/"$TOPIC"_"$id_prefix"" -m "$mqtt_argument"
-#       echo "mqtt sent"
+        log "$DATE - MQTT published: SOC=${VAR}% V=${TOTAL_VOLTAGE}V I=${CHARGE_DISCHARGE}A ${BATTERY_STATUS} cells ${lowcell}-${highcell}mV Δ=${DIFF}mV"
 
                 fi
         fi
