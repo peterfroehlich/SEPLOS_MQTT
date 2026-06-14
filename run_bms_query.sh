@@ -55,19 +55,14 @@ process_pack() {
 	fi
 
 	local QUERY
-	QUERY=$(DEV="$dev" BAUD="$baud" ADDR="$addr" ~/SEPLOS_MQTT/query_seplos_ha.sh 4201)
+	QUERY=$(DEV="$dev" BAUD="$baud" ADDR="$addr" ~/SEPLOS_MQTT/query_seplos_ha.sh 4201 2>&1)
 
 	local onlycells lowcell highcell DIFF lowcellnumb highcellnumb VAR
 	local CELL1 CELL2 CELL3 CELL4 CELL5 CELL6 CELL7 CELL8 CELL9 CELL10 CELL11 CELL12 CELL13 CELL14 CELL15 CELL16
 	local CHARGE_DISCHARGE TOTAL_VOLTAGE RESIDUAL_CAPACITY RESIDUAL_CAPACITY_KWH BATTERY_STATUS
 
+	# Cheap string extraction first — must work even on garbage input.
 	onlycells=$(echo $QUERY|awk '{print $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16}')
-	lowcell=$(echo ${onlycells[@]} | awk 'BEGIN{RS=" ";} {print $1}' | sort | sed -n 1p)
-	highcell=$(echo ${onlycells[@]} | awk 'BEGIN{RS=" ";} {print $1}' | sort | sed -n 16p)
-	DIFF=$(bc -l <<< "$highcell - $lowcell")
-	lowcellnumb=$(echo ${onlycells[@]} | awk 'BEGIN{RS=" ";} {print $1}' | nawk '{print $0, FNR}' | sort | sed -n 1p | awk '{print $2}')
-	highcellnumb=$(echo ${onlycells[@]} | awk 'BEGIN{RS=" ";} {print $1}' | nawk '{print $0, FNR}' | sort | sed -n 16p | awk '{print $2}')
-
 	VAR="$(echo $QUERY|awk '{print $27}')"
 	CELL1=$(echo $QUERY|awk '{print $1}')
 	CELL2=$(echo $QUERY|awk '{print $2}')
@@ -86,35 +81,43 @@ process_pack() {
 	CELL15=$(echo $QUERY|awk '{print $15}')
 	CELL16=$(echo $QUERY|awk '{print $16}')
 
+	# Validate before any arithmetic — bad input would otherwise crash bc.
 	if [[ "$onlycells" =~ "rror" ]]; then
 		log "$DATE - [$pack_name] Warning 1: Data from BMS contain 'Error' skip data"
 		return
 	elif [[ "$onlycells" =~ "Failed" ]]; then
 		log "$DATE - [$pack_name] Warning 2: Data from BMS contain 'Failed' skip data"
 		return
-	elif (( $(echo "$VAR"'>'100 |bc -l) )); then
-		log "$DATE - [$pack_name] Warning 3: SOC value over 100 value=$VAR skip data"
-		return
-	elif (( $(echo "$VAR"'<'1 |bc -l) )); then
-		log "$DATE - [$pack_name] Warning 4: SOC Value below 1 SOC=$VAR skip data"
-		return
 	elif [[ "$onlycells" =~ "~" ]]; then
 		log "$DATE - [$pack_name] Warning 5: Data from BMS contain '~' skip data"
 		return
-	elif [ "${VAR+x}" = x ] && [ -z "$VAR" ]; then
+	elif [ -z "$VAR" ]; then
 		log "$DATE - [$pack_name] Warning 6: SOC value is null skip data"
 		return
+	elif (( $(echo "$VAR"'>'100 |bc -l 2>/dev/null) )); then
+		log "$DATE - [$pack_name] Warning 3: SOC value over 100 value=$VAR skip data"
+		return
+	elif (( $(echo "$VAR"'<'1 |bc -l 2>/dev/null) )); then
+		log "$DATE - [$pack_name] Warning 4: SOC Value below 1 SOC=$VAR skip data"
+		return
 	fi
+
+	# Data looks sane — now do arithmetic.
+	lowcell=$(echo ${onlycells[@]} | awk 'BEGIN{RS=" ";} {print $1}' | sort | sed -n 1p)
+	highcell=$(echo ${onlycells[@]} | awk 'BEGIN{RS=" ";} {print $1}' | sort | sed -n 16p)
+	DIFF=$(bc -l 2>/dev/null <<< "$highcell - $lowcell")
+	lowcellnumb=$(echo ${onlycells[@]} | awk 'BEGIN{RS=" ";} {print $1}' | nawk '{print $0, FNR}' | sort | sed -n 1p | awk '{print $2}')
+	highcellnumb=$(echo ${onlycells[@]} | awk 'BEGIN{RS=" ";} {print $1}' | nawk '{print $0, FNR}' | sort | sed -n 16p | awk '{print $2}')
 
 	checkcellsvoltage || return
 
 	CHARGE_DISCHARGE=$(echo $QUERY|awk '{print $23}')
 	TOTAL_VOLTAGE=$(echo $QUERY|awk '{print $24}')
 	RESIDUAL_CAPACITY=$(echo $QUERY|awk '{print $25}')
-	RESIDUAL_CAPACITY_KWH=$(bc -l <<< "scale=3; $RESIDUAL_CAPACITY * $TOTAL_VOLTAGE / 1000")
-	if (( $(echo "$CHARGE_DISCHARGE > 0" | bc -l) )); then
+	RESIDUAL_CAPACITY_KWH=$(bc -l 2>/dev/null <<< "scale=3; $RESIDUAL_CAPACITY * $TOTAL_VOLTAGE / 1000")
+	if (( $(echo "$CHARGE_DISCHARGE > 0" | bc -l 2>/dev/null) )); then
 		BATTERY_STATUS="Charging"
-	elif (( $(echo "$CHARGE_DISCHARGE < 0" | bc -l) )); then
+	elif (( $(echo "$CHARGE_DISCHARGE < 0" | bc -l 2>/dev/null) )); then
 		BATTERY_STATUS="Discharge"
 	else
 		BATTERY_STATUS="Standby"
