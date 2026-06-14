@@ -22,9 +22,7 @@ git clone https://github.com/byte4geek/SEPLOS_MQTT.git
 chmod 700 ~/SEPLOS_MQTT/query_seplos_ha.sh ~/SEPLOS_MQTT/run_bms_query.sh ~/SEPLOS_MQTT/publish_ha_discovery.sh
 ```
 
-edit the script ```~/SEPLOS_MQTT/query_seplos_ha.sh``` and set the COM port that you use (Ex. DEV=/dev/ttyUSB0)
-
-edit the file config.ini ```~/SEPLOS_MQTT/config.ini``` and set the below parameters with your MQTT server information:
+edit the file config.ini ```~/SEPLOS_MQTT/config.ini``` and set the serial device (`DEV`), baud rate (`BAUD`) and MQTT server information:
 
 ```
 # insert the mqtt info below
@@ -46,6 +44,10 @@ MAXSIZE=2000000
 CELL_MIN_VOLT=2500
 # Maximum voltage in mV permitted for Cell value for correct output
 CELL_MAX_VOLT=3800
+# Serial device for the RS485 adapter
+DEV=/dev/ttyUSB0
+# Serial baud rate (Seplos BMS: 19200 for v16/v3, 9600 for older v2)
+BAUD=19200
 ```
 
 then install the following pkg:
@@ -130,9 +132,7 @@ chmod 700 ./SEPLOS_MQTT/query_seplos_ha.sh ./SEPLOS_MQTT/run_bms_query_ha.sh ./S
 ssh-copy-id root@<YOUR HA IP>     ---> and choose yes
 ```
 
-edit the script ```./SEPLOS_MQTT/query_seplos_ha.sh``` and set the COM port that you use (Ex. DEV=/dev/ttyUSB0)
-
-edit the file config.ini ```./SEPLOS_MQTT/config.ini``` and set the below parameters with your MQTT server information:
+edit the file config.ini ```./SEPLOS_MQTT/config.ini``` and set the serial device (`DEV`), baud rate (`BAUD`) and MQTT server information:
 
 ```
 # insert the mqtt info below
@@ -154,6 +154,10 @@ MAXSIZE=2000000
 CELL_MIN_VOLT=2500
 # Maximum voltage in mV permitted for Cell value for correct output
 CELL_MAX_VOLT=3800
+# Serial device for the RS485 adapter
+DEV=/dev/ttyUSB0
+# Serial baud rate (Seplos BMS: 19200 for v16/v3, 9600 for older v2)
+BAUD=19200
 ```
 
 create a shell command in HA:

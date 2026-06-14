@@ -1,6 +1,11 @@
 #!/bin/bash
 
-DEV=/dev/ttyUSB0
+CONFIG_DIR="${CONFIG_DIR:-$(dirname "$(readlink -f "$0")")}"
+CONFIG_FILE="$CONFIG_DIR/config.ini"
+DEV=$(grep "^DEV=" "$CONFIG_FILE" | awk -F "=" '{print $2}')
+BAUD=$(grep "^BAUD=" "$CONFIG_FILE" | awk -F "=" '{print $2}')
+DEV="${DEV:-/dev/ttyUSB0}"
+BAUD="${BAUD:-19200}"
 ADDR=00
 
 # Get a 4 ASCII digit number and divide by $1, precision $2 ( or 2dp. ) $3 == 1 for signed.
@@ -94,7 +99,7 @@ read_serdata()
 
 # Todo... calculate length checksum and insert in send string.
 
-stty -F $DEV sane -echo -echoe -echok 19200
+stty -F $DEV sane -echo -echoe -echok $BAUD
 
 SUM=0
 
