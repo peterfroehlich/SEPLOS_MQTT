@@ -19,7 +19,7 @@ move to the your user home and use git clone to download this script
 ```
 git clone https://github.com/byte4geek/SEPLOS_MQTT.git
 
-chmod 700 ~/SEPLOS_MQTT/query_seplos_ha.sh ~/SEPLOS_MQTT/run_bms_query.sh
+chmod 700 ~/SEPLOS_MQTT/query_seplos_ha.sh ~/SEPLOS_MQTT/run_bms_query.sh ~/SEPLOS_MQTT/publish_ha_discovery.sh
 ```
 
 edit the script ```~/SEPLOS_MQTT/query_seplos_ha.sh``` and set the COM port that you use (Ex. DEV=/dev/ttyUSB0)
@@ -108,7 +108,7 @@ you can see the output like this:
 When the script run, it sends an MQTT message like this:
 
 ```
-homeassistant/sensor/seplos_364715398511 {"lowest_cell":"Cell 8 - 3427 mV","highest_cell":"Cell 7 - 3435 mV","difference":"8","cell01":"3431","cell02":"3431","cell03":"3434","cell04":"3430","cell05":"3433","cell06":"3432","cell07":"3435","cell08":"3427","cell09":"3431","cell10":"3428","cell11":"3433","cell12":"3433","cell13":"3435","cell14":"3431","cell15":"3435","cell16":"3428","cell_temp1":"31.7","cell_temp2":"32.2","cell_temp3":"32.0","cell_temp4":"31.9","env_temp":"37.2","power_temp":"34.9","charge_discharge":"26.01","total_voltage":"54.90","residual_capacity":"271.24","soc":"96.8","cycles":"12","soh":"100.0","port_voltage":"54.93"}
+homeassistant/sensor/seplos_364715398511 {"lowest_cell":"Cell 8 - 3427 mV","highest_cell":"Cell 7 - 3435 mV","difference":"8","cell01":"3431","cell02":"3431","cell03":"3434","cell04":"3430","cell05":"3433","cell06":"3432","cell07":"3435","cell08":"3427","cell09":"3431","cell10":"3428","cell11":"3433","cell12":"3433","cell13":"3435","cell14":"3431","cell15":"3435","cell16":"3428","cell_temp1":"31.7","cell_temp2":"32.2","cell_temp3":"32.0","cell_temp4":"31.9","env_temp":"37.2","power_temp":"34.9","charge_discharge":"26.01","total_voltage":"54.90","residual_capacity":"271.24","soc":"96.8","cycles":"12","soh":"100.0","port_voltage":"54.93","residual_capacity_kwh":"14.892","battery_status":"Charging"}
 ```
 
 ## Installation and configuration for Home Assistant only
@@ -125,7 +125,7 @@ cd /share
 
 git clone https://github.com/byte4geek/SEPLOS_MQTT.git
 
-chmod 700 ./SEPLOS_MQTT/query_seplos_ha.sh ./SEPLOS_MQTT/run_bms_query_ha.sh
+chmod 700 ./SEPLOS_MQTT/query_seplos_ha.sh ./SEPLOS_MQTT/run_bms_query_ha.sh ./SEPLOS_MQTT/publish_ha_discovery.sh
 
 ssh-copy-id root@<YOUR HA IP>     ---> and choose yes
 ```
@@ -174,7 +174,40 @@ then create an automation to run the script every 10 seconds or what you prefer
 
 ## Configuring Home Assistant
 
-Based on the MQTT message then create all MQTT sensors and the template sensors using the configuration.yaml file and add all sensors to the Home Assistant dashboard using the lovelace.yaml file
+### Option A — MQTT auto-discovery (recommended)
+
+`run_bms_query.sh` / `run_bms_query_ha.sh` call `publish_ha_discovery.sh` at startup. It publishes a single retained **device-based** discovery payload at `homeassistant/device/<topic>_<id_prefix>/config` (HA 2024.11+ format) that describes every sensor as a component under one device named **SEPLOS BMS**. Home Assistant's MQTT integration picks it up automatically and creates all entities pre-configured (units, device classes, icons), with `origin` metadata pointing back to this project.
+
+Requirements:
+- Home Assistant **2024.11 or newer** (device-based discovery support)
+- MQTT integration enabled in Home Assistant
+- MQTT discovery prefix left at the default `homeassistant`
+
+Sensors published:
+- `cell01`..`cell16` (mV)
+- `lowest_cell_v`, `lowest_cell_n`, `highest_cell_v`, `highest_cell_n`, `difference`
+- `cell_temp1`..`cell_temp4`, `env_temp`, `power_temp` (°C)
+- `port_voltage`, `total_voltage` (V), `charge_discharge` (A)
+- `residual_capacity` (Ah), `residual_capacity_kwh` (kWh), `soc` (%), `soh` (%), `cycles`
+- `battery_status` (Charging / Discharge / Standby — computed from `charge_discharge`)
+
+Manual publish (e.g. after editing `config.ini`):
+```
+~/SEPLOS_MQTT/publish_ha_discovery.sh
+```
+
+Unique IDs match the legacy `configuration.yaml` entries, so users migrating from Option B will not get duplicate entities (entity friendly names may change because all sensors now sit under the SEPLOS BMS device — rename in the HA UI if desired).
+
+To clear an old retained discovery payload (e.g. after changing `id_prefix`):
+```
+mosquitto_pub -h <MQTTHOST> -u <user> -P <pass> -r -n -t homeassistant/device/<old_node_id>/config
+```
+
+Add sensors to your dashboard using `lovelace.yaml`.
+
+### Option B — Manual configuration.yaml (legacy)
+
+If you prefer not to use MQTT discovery, create all MQTT sensors and template sensors manually using `configuration.yaml`, then add them to the dashboard with `lovelace.yaml`. Not required when Option A is in use.
 
 example:
 ![BMS dashboard](https://github.com/byte4geek/Seplos-BMS-vs-Home-Assistant/raw/main/bms_ha_panel.JPG)

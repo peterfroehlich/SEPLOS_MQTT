@@ -19,7 +19,7 @@ checkcellsvoltage()
          counter=1
          for CELLVOLTAGE in "$CELL1" "$CELL2" "$CELL3" "$CELL4" "$CELL5" "$CELL6" "$CELL7" "$CELL8" "$CELL9" "$CELL10" "$CELL11" "$CELL12" "$CELL13" "$CELL14" "$CELL15" "$CELL16"; do
                 if [ "$CELLVOLTAGE" -lt $CELL_MIN_VOLT ] || [ "$CELLVOLTAGE" -gt $CELL_MAX_VOLT ]; then
-                        echo "$(date) - Error: The value $CELLVOLTAGE for cell "$counter" is not between "$CELL_MIN_VOLT" and "$CELL_MAX_VOLT"" >> $LOGNAME
+                        echo "$DATE - Warning 0: The value $CELLVOLTAGE for cell "$counter" is not between "$CELL_MIN_VOLT" and "$CELL_MAX_VOLT" skip data" >> $LOGNAME
                         STATUS=1
                         break
                 fi
@@ -40,6 +40,9 @@ if [ ! -f "$NOUPFILE" ]; then
 touch "$NOUPFILE"
 fi
 
+# Publish Home Assistant MQTT auto-discovery configs (retained). Cheap; safe to run every cycle.
+/root/share/SEPLOS_MQTT/publish_ha_discovery.sh >> $LOGNAME
+
 #for (( ; ; ))
 #do
   LOGNAME_SIZE=$(ls -l "$LOGNAME" | awk '{print $5}')
@@ -54,6 +57,7 @@ fi
   fi
 
    QUERY=$(/root/share/SEPLOS_MQTT/query_seplos_ha.sh 4201)
+   DATE=$(date '+%Y-%m-%d %H:%M:%S')
 
 # Find lowest and high value
                onlycells=$(echo $QUERY|awk '{print $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16}')
@@ -89,27 +93,34 @@ CELL15=$(echo $QUERY|awk '{print $15}')
 CELL16=$(echo $QUERY|awk '{print $16}')
 
         if [[ "$onlycells" =~ "rror" ]]; then
-                echo "$(date) - Possible bad read data from BMS - Error 1" >> $LOGNAME
-#               echo "$(date) - Possible bad read data from BMS - Error 1"
+                echo "$DATE - Warning 1: Data from BMS contain 'Error' skip data" >> $LOGNAME
         elif [[ "$onlycells" =~ "Failed" ]]; then
-                echo "$(date) - Possible bad read data from BMS - Error 2" >> $LOGNAME
-#               echo "$(date) - Possible bad read data from BMS - Error 2"
+                echo "$DATE - Warning 2: Data from BMS contain 'Failed' skip data" >> $LOGNAME
         elif (( $(echo "$VAR"'>'100 |bc -l) )); then
-                echo "$(date) - Possible bad read data from BMS - Error 3" >> $LOGNAME
-#               echo "$(date) - Possible bad read data from BMS - Error 3"
+                echo "$DATE - Warning 3: SOC value over 100 value=$VAR skip data" >> $LOGNAME
         elif (( $(echo "$VAR"'<'1 |bc -l) )); then
-                echo "$(date) - Possible bad read data from BMS - Error 4" >> $LOGNAME
-#               echo "$(date) - Possible bad read data from BMS - Error 4"
+                echo "$DATE - Warning 4: SOC Value below 1 SOC=$VAR skip data" >> $LOGNAME
         elif [[ "$onlycells" =~ "~" ]]; then
-                echo "$(date) - Possible bad read data from BMS - Error 5" >> $LOGNAME
-#               echo "$(date) - Possible bad read data from BMS - Error 5"
+                echo "$DATE - Warning 5: Data from BMS contain '~' skip data" >> $LOGNAME
         elif [ "${VAR+x}" = x ] && [ -z "$VAR" ]; then
-                echo "$(date) - Possible bad read data from BMS - Error 6" >> $LOGNAME
-#               echo "$(date) - Possible bad read data from BMS - Error 6"
+                echo "$DATE - Warning 6: SOC value is null skip data" >> $LOGNAME
         else
 
         checkcellsvoltage
                 if [ $? = 0 ]; then
+
+# Computed values for HA discovery sensors
+CHARGE_DISCHARGE=$(echo $QUERY|awk '{print $23}')
+TOTAL_VOLTAGE=$(echo $QUERY|awk '{print $24}')
+RESIDUAL_CAPACITY=$(echo $QUERY|awk '{print $25}')
+RESIDUAL_CAPACITY_KWH=$(bc -l <<< "scale=3; $RESIDUAL_CAPACITY * $TOTAL_VOLTAGE / 1000")
+if (( $(echo "$CHARGE_DISCHARGE > 0" | bc -l) )); then
+    BATTERY_STATUS="Charging"
+elif (( $(echo "$CHARGE_DISCHARGE < 0" | bc -l) )); then
+    BATTERY_STATUS="Discharge"
+else
+    BATTERY_STATUS="Standby"
+fi
 
 # prepare MQTT argument
 mqtt_argument=$(printf "{\
@@ -148,7 +159,9 @@ mqtt_argument=$(printf "{\
 \"soc\":\"$(echo $QUERY|awk '{print $27}')\",\
 \"cycles\":\"$(echo $QUERY|awk '{print $29}')\",\
 \"soh\":\"$(echo $QUERY|awk '{print $30}')\",\
-\"port_voltage\":\"$(echo $QUERY|awk '{print $31}')\"\
+\"port_voltage\":\"$(echo $QUERY|awk '{print $31}')\",\
+\"residual_capacity_kwh\":\"$RESIDUAL_CAPACITY_KWH\",\
+\"battery_status\":\"$BATTERY_STATUS\"\
 }")
 
 # send MQTT message with all parameters

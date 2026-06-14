@@ -22,7 +22,7 @@ read_serdata()
 	while [ "${rdata:0:1}" != "~" ]
 	do
 		tries=$((tries - 1))
-		[ $tries -le 0 ] && { echo "Failed to read start of input char (~), read \"$rdata\"" 1>&2 ; exit 1; }
+		[ $tries -le 0 ] && { echo "$(date '+%Y-%m-%d %H:%M:%S') - Failed to read start of input char (~), read \"$rdata\"" 1>&2 ; exit 1; }
 		read -r -t5 rdata <$DEV
 	done
 

@@ -42,6 +42,9 @@ fi
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') - Script started..." >> $LOGNAME
 
+# Publish Home Assistant MQTT auto-discovery configs once at startup (retained).
+~/SEPLOS_MQTT/publish_ha_discovery.sh >> $LOGNAME
+
 for (( ; ; ))
 do
   LOGNAME_SIZE=$(ls -l "$LOGNAME" | awk '{print $5}')
@@ -113,7 +116,20 @@ CELL16=$(echo $QUERY|awk '{print $16}')
 	   
 	checkcellsvoltage
 		if [ $? = 0 ]; then
-				 
+
+# Computed values for HA discovery sensors
+CHARGE_DISCHARGE=$(echo $QUERY|awk '{print $23}')
+TOTAL_VOLTAGE=$(echo $QUERY|awk '{print $24}')
+RESIDUAL_CAPACITY=$(echo $QUERY|awk '{print $25}')
+RESIDUAL_CAPACITY_KWH=$(bc -l <<< "scale=3; $RESIDUAL_CAPACITY * $TOTAL_VOLTAGE / 1000")
+if (( $(echo "$CHARGE_DISCHARGE > 0" | bc -l) )); then
+    BATTERY_STATUS="Charging"
+elif (( $(echo "$CHARGE_DISCHARGE < 0" | bc -l) )); then
+    BATTERY_STATUS="Discharge"
+else
+    BATTERY_STATUS="Standby"
+fi
+
 # prepare MQTT argument
 mqtt_argument=$(printf "{\
 \"lowest_cell\":\"Cell $lowcellnumb - $lowcell mV\",\
@@ -151,7 +167,9 @@ mqtt_argument=$(printf "{\
 \"soc\":\"$(echo $QUERY|awk '{print $27}')\",\
 \"cycles\":\"$(echo $QUERY|awk '{print $29}')\",\
 \"soh\":\"$(echo $QUERY|awk '{print $30}')\",\
-\"port_voltage\":\"$(echo $QUERY|awk '{print $31}')\"\
+\"port_voltage\":\"$(echo $QUERY|awk '{print $31}')\",\
+\"residual_capacity_kwh\":\"$RESIDUAL_CAPACITY_KWH\",\
+\"battery_status\":\"$BATTERY_STATUS\"\
 }")
 
 # send MQTT message with all parameters
