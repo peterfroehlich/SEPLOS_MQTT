@@ -2,11 +2,14 @@
 
 CONFIG_DIR="${CONFIG_DIR:-$(dirname "$(readlink -f "$0")")}"
 CONFIG_FILE="$CONFIG_DIR/config.ini"
-DEV=$(grep "^DEV=" "$CONFIG_FILE" | awk -F "=" '{print $2}')
-BAUD=$(grep "^BAUD=" "$CONFIG_FILE" | awk -F "=" '{print $2}')
+# Env vars take priority so callers can target a specific pack:
+#   DEV=/dev/ttyUSB1 BAUD=19200 ADDR=01 ./query_seplos_ha.sh 4201
+DEV="${DEV:-$(grep "^DEV=" "$CONFIG_FILE" 2>/dev/null | awk -F "=" '{print $2}')}"
+BAUD="${BAUD:-$(grep "^BAUD=" "$CONFIG_FILE" 2>/dev/null | awk -F "=" '{print $2}')}"
+ADDR="${ADDR:-$(grep "^ADDR=" "$CONFIG_FILE" 2>/dev/null | awk -F "=" '{print $2}')}"
 DEV="${DEV:-/dev/ttyUSB0}"
 BAUD="${BAUD:-19200}"
-ADDR=00
+ADDR="${ADDR:-00}"
 
 # Get a 4 ASCII digit number and divide by $1, precision $2 ( or 2dp. ) $3 == 1 for signed.
 get_div()

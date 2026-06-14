@@ -26,31 +26,33 @@ edit the file config.ini ```~/SEPLOS_MQTT/config.ini``` and set the serial devic
 
 ```
 # insert the mqtt info below
-# mqtt host name
+# Global settings
 MQTTHOST=192.168.1.2
-# name inserted into topic
 TOPIC=seplos
-# mqtt user name
 MQTTUSER=mqttuser
-# mqtt password
 MQTTPASWD=mqttpassword
-# time to read and update datas vs mqtt server and Home Assistant, not used for run_bms_query_ha.sh
 TELEPERIOD=10
-# is a prefix inserted into topic, chage it if you need
-id_prefix=364715398511
-# Optional log file path. Leave empty to log only to stdout.
-# Example: LOGFILE=/home/pi/SEPLOS_MQTT/BMS_error.log
 LOGFILE=
-# Max size in bytes of the log file and nohup.out before they get rotated
 MAXSIZE=2000000
-# Minmum voltage in mV permitted for Cell value for correct output
 CELL_MIN_VOLT=2500
-# Maximum voltage in mV permitted for Cell value for correct output
 CELL_MAX_VOLT=3800
-# Serial device for the RS485 adapter
-DEV=/dev/ttyUSB0
-# Serial baud rate (Seplos BMS: 19200 for v16/v3, 9600 for older v2)
-BAUD=19200
+
+# Pack list — comma-separated. Each name needs a matching block below.
+PACKS=pack1
+
+# pack1 (master, single-pack default)
+pack1_DEV=/dev/ttyUSB0
+pack1_BAUD=19200          # 19200 for v16/v3, 9600 for older v2
+pack1_ADDR=00             # protocol address, two hex chars
+pack1_ID=364715398511     # unique per pack; appended to MQTT topic + HA unique_id
+pack1_NAME=Master         # friendly name shown in Home Assistant
+
+# Example second pack — uncomment + add "pack2" to PACKS to enable
+#pack2_DEV=/dev/ttyUSB1
+#pack2_BAUD=19200
+#pack2_ADDR=01
+#pack2_ID=364715398512
+#pack2_NAME=Slave 1
 ```
 
 then install the following pkg:
@@ -72,8 +74,23 @@ simply run
 or
 ```nohup ~/SEPLOS_MQTT/run_bms_query.sh &```
 
-To test if the communication is working try to run
-```~/SEPLOS_MQTT/query_seplos_ha.sh 4201```
+## Multiple packs (master + slaves)
+
+Each entry in `PACKS=` is queried in turn every cycle and published as its own MQTT topic / HA device. Pack-specific serial settings are read from the matching `<name>_DEV`, `<name>_BAUD`, `<name>_ADDR` keys, so packs can sit on different USB-RS485 adapters with different baud rates (typical Seplos parallel setup: master 9600 on port A, slaves 19200 daisy-chained).
+
+Use `probe_slaves.sh` to find which addresses respond on a given adapter:
+```
+./probe_slaves.sh                # probes 0x00..0x0F on the default DEV/BAUD
+DEV=/dev/ttyUSB1 BAUD=19200 ./probe_slaves.sh
+```
+Set the responding address as `<packN>_ADDR` and add the pack name to `PACKS`.
+
+## Manual test
+
+Query a single pack with explicit overrides:
+```
+DEV=/dev/ttyUSB0 BAUD=9600 ADDR=00 ~/SEPLOS_MQTT/query_seplos_ha.sh 4201
+```
 
 you can see the output like this:
 ```
@@ -139,31 +156,33 @@ edit the file config.ini ```./SEPLOS_MQTT/config.ini``` and set the serial devic
 
 ```
 # insert the mqtt info below
-# mqtt host name
+# Global settings
 MQTTHOST=192.168.1.2
-# name inserted into topic
 TOPIC=seplos
-# mqtt user name
 MQTTUSER=mqttuser
-# mqtt password
 MQTTPASWD=mqttpassword
-# time to read and update datas vs mqtt server and Home Assistant, not used for run_bms_query_ha.sh
 TELEPERIOD=10
-# is a prefix inserted into topic, chage it if you need
-id_prefix=364715398511
-# Optional log file path. Leave empty to log only to stdout.
-# Example: LOGFILE=/home/pi/SEPLOS_MQTT/BMS_error.log
 LOGFILE=
-# Max size in bytes of the log file and nohup.out before they get rotated
 MAXSIZE=2000000
-# Minmum voltage in mV permitted for Cell value for correct output
 CELL_MIN_VOLT=2500
-# Maximum voltage in mV permitted for Cell value for correct output
 CELL_MAX_VOLT=3800
-# Serial device for the RS485 adapter
-DEV=/dev/ttyUSB0
-# Serial baud rate (Seplos BMS: 19200 for v16/v3, 9600 for older v2)
-BAUD=19200
+
+# Pack list — comma-separated. Each name needs a matching block below.
+PACKS=pack1
+
+# pack1 (master, single-pack default)
+pack1_DEV=/dev/ttyUSB0
+pack1_BAUD=19200          # 19200 for v16/v3, 9600 for older v2
+pack1_ADDR=00             # protocol address, two hex chars
+pack1_ID=364715398511     # unique per pack; appended to MQTT topic + HA unique_id
+pack1_NAME=Master         # friendly name shown in Home Assistant
+
+# Example second pack — uncomment + add "pack2" to PACKS to enable
+#pack2_DEV=/dev/ttyUSB1
+#pack2_BAUD=19200
+#pack2_ADDR=01
+#pack2_ID=364715398512
+#pack2_NAME=Slave 1
 ```
 
 create a shell command in HA:
@@ -186,7 +205,7 @@ then create an automation to run the script every 10 seconds or what you prefer
 
 ### Option A — MQTT auto-discovery (recommended)
 
-`run_bms_query.sh` / `run_bms_query_ha.sh` call `publish_ha_discovery.sh` at startup. It publishes a single retained **device-based** discovery payload at `homeassistant/device/<topic>_<id_prefix>/config` (HA 2024.11+ format) that describes every sensor as a component under one device named **SEPLOS BMS**. Home Assistant's MQTT integration picks it up automatically and creates all entities pre-configured (units, device classes, icons), with `origin` metadata pointing back to this project.
+`run_bms_query.sh` / `run_bms_query_ha.sh` call `publish_ha_discovery.sh` at startup. For each pack listed in `PACKS=` it publishes a retained **device-based** discovery payload at `homeassistant/device/<topic>_<pack_ID>/config` (HA 2024.11+ format) describing every sensor as a component under one device named `SEPLOS BMS <pack_NAME>`. Home Assistant's MQTT integration picks it up automatically and creates all entities pre-configured (units, device classes, icons), with `origin` metadata pointing back to this project.
 
 Requirements:
 - Home Assistant **2024.11 or newer** (device-based discovery support)
