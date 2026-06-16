@@ -59,7 +59,7 @@ process_pack() {
 
 	local onlycells lowcell highcell DIFF lowcellnumb highcellnumb VAR
 	local CELL1 CELL2 CELL3 CELL4 CELL5 CELL6 CELL7 CELL8 CELL9 CELL10 CELL11 CELL12 CELL13 CELL14 CELL15 CELL16
-	local CHARGE_DISCHARGE TOTAL_VOLTAGE RESIDUAL_CAPACITY RESIDUAL_CAPACITY_KWH BATTERY_STATUS
+	local CHARGE_DISCHARGE TOTAL_VOLTAGE RESIDUAL_CAPACITY RESIDUAL_CAPACITY_KWH BATTERY_STATUS BATTERY_POWER
 
 	# Cheap string extraction first — must work even on garbage input.
 	onlycells=$(echo $QUERY|awk '{print $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16}')
@@ -115,6 +115,7 @@ process_pack() {
 	TOTAL_VOLTAGE=$(echo $QUERY|awk '{print $24}')
 	RESIDUAL_CAPACITY=$(echo $QUERY|awk '{print $25}')
 	RESIDUAL_CAPACITY_KWH=$(bc -l 2>/dev/null <<< "scale=3; $RESIDUAL_CAPACITY * $TOTAL_VOLTAGE / 1000")
+	BATTERY_POWER=$(bc -l 2>/dev/null <<< "scale=1; $CHARGE_DISCHARGE * $TOTAL_VOLTAGE")
 	if (( $(echo "$CHARGE_DISCHARGE > 0" | bc -l 2>/dev/null) )); then
 		BATTERY_STATUS="Charging"
 	elif (( $(echo "$CHARGE_DISCHARGE < 0" | bc -l 2>/dev/null) )); then
@@ -162,7 +163,8 @@ process_pack() {
 \"soh\":\"$(echo $QUERY|awk '{print $30}')\",\
 \"port_voltage\":\"$(echo $QUERY|awk '{print $31}')\",\
 \"residual_capacity_kwh\":\"$RESIDUAL_CAPACITY_KWH\",\
-\"battery_status\":\"$BATTERY_STATUS\"\
+\"battery_status\":\"$BATTERY_STATUS\",\
+\"battery_power\":\"$BATTERY_POWER\"\
 }")
 
 	mosquitto_pub -h "$MQTTHOST" -u "$MQTTUSER" -P "$MQTTPASWD" -t "homeassistant/sensor/${TOPIC}_${pack_id}" -m "$mqtt_argument"

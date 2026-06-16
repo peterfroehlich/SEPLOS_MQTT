@@ -130,7 +130,7 @@ you can see the output like this:
 When the script run, it sends an MQTT message like this:
 
 ```
-homeassistant/sensor/seplos_364715398511 {"lowest_cell":"Cell 8 - 3427 mV","highest_cell":"Cell 7 - 3435 mV","difference":"8","cell01":"3431","cell02":"3431","cell03":"3434","cell04":"3430","cell05":"3433","cell06":"3432","cell07":"3435","cell08":"3427","cell09":"3431","cell10":"3428","cell11":"3433","cell12":"3433","cell13":"3435","cell14":"3431","cell15":"3435","cell16":"3428","cell_temp1":"31.7","cell_temp2":"32.2","cell_temp3":"32.0","cell_temp4":"31.9","env_temp":"37.2","power_temp":"34.9","charge_discharge":"26.01","total_voltage":"54.90","residual_capacity":"271.24","soc":"96.8","cycles":"12","soh":"100.0","port_voltage":"54.93","residual_capacity_kwh":"14.892","battery_status":"Charging"}
+homeassistant/sensor/seplos_364715398511 {"lowest_cell":"Cell 8 - 3427 mV","highest_cell":"Cell 7 - 3435 mV","difference":"8","cell01":"3431","cell02":"3431","cell03":"3434","cell04":"3430","cell05":"3433","cell06":"3432","cell07":"3435","cell08":"3427","cell09":"3431","cell10":"3428","cell11":"3433","cell12":"3433","cell13":"3435","cell14":"3431","cell15":"3435","cell16":"3428","cell_temp1":"31.7","cell_temp2":"32.2","cell_temp3":"32.0","cell_temp4":"31.9","env_temp":"37.2","power_temp":"34.9","charge_discharge":"26.01","total_voltage":"54.90","residual_capacity":"271.24","soc":"96.8","cycles":"12","soh":"100.0","port_voltage":"54.93","residual_capacity_kwh":"14.892","battery_status":"Charging","battery_power":"1427.9"}
 ```
 
 ## Installation and configuration for Home Assistant only
@@ -218,7 +218,23 @@ Sensors published:
 - `cell_temp1`..`cell_temp4`, `env_temp`, `power_temp` (°C)
 - `port_voltage`, `total_voltage` (V), `charge_discharge` (A)
 - `residual_capacity` (Ah), `residual_capacity_kwh` (kWh), `soc` (%), `soh` (%), `cycles`
+- `battery_power` (W, signed — positive = charging, negative = discharging — computed from `charge_discharge × total_voltage`)
 - `battery_status` (Charging / Discharge / Standby — computed from `charge_discharge`)
+
+### Energy dashboard setup
+
+`battery_power` (W) is published with `device_class=power` + `state_class=measurement` so Home Assistant can integrate it. The Energy dashboard's *Home Battery Storage* section needs cumulative in/out kWh (`total_increasing`), which HA derives via two built-in helpers:
+
+1. Settings → Devices & Services → Helpers → **Add Helper → Integration – Riemann sum integral sensor**
+   - Source: `sensor.seplos_bms_master_battery_power` (per pack)
+   - Method: `trapezoidal`
+   - Unit prefix: `k` (kW → kWh integral)
+   - Unit time: `Hours`
+   - This produces a signed cumulative kWh sensor
+2. Add two **Utility Meter** helpers from that integral, one for charging, one for discharging (each picks up only the positive / negative slope via a template if needed).
+3. Energy dashboard → *Add battery* → pick the two utility-meter sensors.
+
+Repeat per pack if you run multiple.
 
 Manual publish (e.g. after editing `config.ini`):
 ```

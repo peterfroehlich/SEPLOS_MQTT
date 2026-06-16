@@ -74,6 +74,9 @@ build_cmps() {
 
     add_sensor "charge_discharge"      "Charge Discharge"      "A"   "current"        "" "" "measurement"
     add_sensor "total_voltage"         "Total Voltage"         "V"   "voltage"        "" "" "measurement"
+    # Signed live power: +charging, -discharging. Feed an HA "Integration - Riemann sum"
+    # helper to derive cumulative kWh in/out, then attach to Energy dashboard.
+    add_sensor "battery_power"         "Battery Power"         "W"   "power"          "" "" "measurement"
     add_sensor "residual_capacity"     "Residual Capacity"     "Ah"  ""               "mdi:alpha-a-box" "" "measurement"
     # energy_storage = current amount stored (goes up/down), pairs with state_class=measurement.
     # Plain "energy" device_class would require total_increasing and break for a fluctuating value.
